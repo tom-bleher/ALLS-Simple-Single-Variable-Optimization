@@ -7,7 +7,7 @@ import random
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from pyqtgraph.Qt import QtCore, QtWidgets
 import sys 
 
 """
@@ -32,17 +32,20 @@ class ImageHandler(FileSystemEventHandler):
         if not event.is_directory:
             self.optimize_count_callback([event.src_path])
 
-class BetatronApplication:
-    def __init__(self):
+class BetatronApplication(QtWidgets.QApplication):
+    def __init__(self, *args, **kwargs):
+        super(BetatronApplication, self).__init__(*args, **kwargs)
+
+        # establish connection via ftp with dm computer for the first time progra is ran
         # ip, windows user and password of deformable mirror computer
-        self.host = "192.168.200.3"
-        self.user = "Utilisateur"
-        self.password = "alls"
+        self.ftp = FTP()
+        self.ftp.connect(host="192.168.200.3")
+        self.ftp.login(user="Utilisateur", passwd="alls")
 
         # initialize optimization variables
         self.single_img_mean_count = 0
         self.mean_count_per_image_group  = 0
-        self.norm_delta_count = 0
+        self.delta_count = 0
 
         # for how many images should the mean be taken for
         self.image_group = 2 
@@ -63,7 +66,7 @@ class BetatronApplication:
         self.direction = random.choice([-1, +1])
         
         # set count change tolerance under which the program will consider the case optimized 
-        self.count_change_tolerance = 0.001
+        self.count_change_tolerance = 10
         
         # initialize lists to keep track of optimization process
         self.count_history = []
@@ -78,8 +81,11 @@ class BetatronApplication:
 
         # image path (should match to path specified in SpinView)
         self.IMG_PATH = r'images'
-        self.image_files = [os.path.join(self.IMG_PATH, filename) for filename in os.listdir(self.IMG_PATH) if filename.endswith('.tiff') and os.path.isfile(os.path.join(self.IMG_PATH, filename))]
-        
+
+        # define the list of image files
+        self.image_files = []
+                
+        # setup tracking for new images
         self.waiting_for_images_printed = False
         self.new_image_tracker()
 
@@ -101,9 +107,9 @@ class BetatronApplication:
         
         # iterate over each filename in the IMG_PATH directory
         for filename in os.listdir(self.IMG_PATH):
-            # check if the filename ends with '.tiff' and is a file
-            if filename.endswith('.tiff') and os.path.isfile(os.path.join(self.IMG_PATH, filename)):
-                # if both conditions are met, add the file's path to the new_files list
+            # check if the filename ends with '.tiff'
+            if filename.endswith('.tiff'):
+                # add the file's path to the new_files list
                 self.new_files.append(os.path.join(self.IMG_PATH, filename))
 
         if self.new_files:
@@ -111,12 +117,7 @@ class BetatronApplication:
 
     # method used to send the new values to the deformable mirror computer via FTP
     def upload_files_to_ftp(self):
-        ftp = FTP()
-        ftp.connect(host=self.host)
-        ftp.login(user=self.user, passwd=self.password)
-
         base_directory = 'Server'
-
         mirror_files = [os.path.basename(MIRROR_TXT_PATH)]
 
         # try to send the file via ftp connection
@@ -125,17 +126,15 @@ class BetatronApplication:
             for file_name in local_files:
                 local_MIRROR_TXT_PATH = os.path.join(mirror_files, file_name)
                 if os.path.isfile(local_MIRROR_TXT_PATH):
-
                     copy_path = os.path.join(mirror_files, f'copy_{file_name}')
                     shutil.copy(local_MIRROR_TXT_PATH, copy_path)
 
                     with open(copy_path, 'rb') as local_file:
-                        ftp.storbinary(f'STOR {file_name}', local_file)
+                        self.ftp.storbinary(f'STOR {file_name}', local_file)
 
                     os.remove(copy_path)
                     print(f"Uploaded: {file_name}")
         
-        # log the error if there was one 
         except Exception as e:
             print(f"Error: {e}")
 
@@ -216,9 +215,9 @@ class BetatronApplication:
                         # this the new peak count
                         self.record_count_history.append(self.count_history[-1]) 
 
-                        # recalculate norm_delta_count for new peak
-                        norm_delta_count = (self.count_history[-2] - self.record_count_history[-1])/(self.record_count_history[-1]) 
-                        self.delta_count_history.append(norm_delta_count) # add to respective list
+                        # recalculate delta_count for new peak
+                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                        self.delta_count_history.append(delta_count) # add to respective list
 
                         # the first run is our closest to the current peak
                         self.min_delta_count_history.append(self.delta_count_history[-1]) 
@@ -233,27 +232,30 @@ class BetatronApplication:
 
                     # if the new brightness is not larger, this wasn't the right direction
                     else: 
-                        # recalculate norm_delta_count for new peak
-                        norm_delta_count = (self.count_history[-1] - self.record_count_history[-1])/(self.record_count_history[-1]) 
-                        self.delta_count_history.append(norm_delta_count) # add to respective list           
+                        # recalculate delta_count for new peak
+                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                        self.delta_count_history.append(delta_count) # add to respective list           
 
                         # this is the current closest to the peak count
                         self.min_delta_count_history.append(self.delta_count_history[-1])
 
-                        
+                        # switch direction
                         self.new_focus = self.new_focus + self.step_size * self.direction * -1 
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
                         print("This is no good, switching direction")
 
-                else: # on the third occurrence and forward we have enough data to start optimization
-                    norm_delta_count = (self.count_history[-1] - self.record_count_history[-1])/(self.record_count_history[-1]) # compare to record count
-                    self.delta_count_history.append(norm_delta_count)
+                # on the third occurrence and forward we have enough data to start optimization
+                else: 
+                    # compare to record count
+                    delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                    self.delta_count_history.append(delta_count)
                     
                     # if latest count is larger than the previous record
                     if self.count_history[-1] > self.record_count_history[-1]:
-                        self.record_count_history.append(self.count_history[-1]) # this is the new current peak count
+                        # this is the new current peak count
+                        self.record_count_history.append(self.count_history[-1]) 
                         
                         # continue in this direction
                         self.new_focus = self.new_focus + self.step_size * self.direction
@@ -262,21 +264,23 @@ class BetatronApplication:
                         values[0] = self.focus_history[-1]
                         print("New count record")
                     
-                    # we're closer than before to the record so continue in this direction
-                    elif self.delta_count_history and self.min_delta_count_history and (np.abs(self.delta_count_history[-1]) < np.abs(self.min_delta_count_history[-1])):
-                        self.min_delta_count_history.append(self.delta_count_history[-1])  # this is the new closest to the peak count
-                        self.new_focus = self.new_focus + self.step_size * self.direction
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        self.focus_history.append(self.new_focus)  # update new focus
-                        values[0] = self.focus_history[-1]
-                        print(f"Let's continue this direction")
-
                     # we're close enough to the optimized value, stop adjusting focus value
-                    elif np.abs((self.count_history[-1] - self.record_count_history[-1])/(self.record_count_history[-1])) <= self.count_change_tolerance:
+                    elif np.abs((self.count_history[-1] - self.count_history[-2])) <= self.count_change_tolerance:
                         self.image_group_count_sum = 0
                         self.mean_count_per_image_group  = 0
                         self.single_img_mean_count = 0
                         print("I'm close to the peak count, not changing focus")
+
+                    # we're closer than before to the record so continue in this direction
+                    elif self.delta_count_history and self.min_delta_count_history and (np.abs(self.delta_count_history[-1]) < np.abs(self.min_delta_count_history[-1])):
+                        # this is the new closest to the peak count
+                        self.min_delta_count_history.append(self.delta_count_history[-1])  
+                        self.new_focus = self.new_focus + self.step_size * self.direction
+                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
+                        # update new focus
+                        self.focus_history.append(self.new_focus)  
+                        values[0] = self.focus_history[-1]
+                        print(f"Let's continue in this direction")
 
                     else:  # we're not closer than before, let's move to the other direction instead
                         self.new_focus = self.new_focus + self.step_size * self.direction * -1
@@ -286,7 +290,7 @@ class BetatronApplication:
                         print("This is no good, switching direction")
                 
                 # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
-                #self.upload_files_to_ftp() 
+                # self.upload_files_to_ftp() 
                       
                 # print the latest mean count (helps track system)
                 print(f"Mean count for last {self.image_group} images: {self.count_history[-1]}")
@@ -295,10 +299,18 @@ class BetatronApplication:
                 print(f"Current focus: {self.focus_history[-1]}")  
                 print('-------------')
 
+                # write new value to txt file
+                with open(MIRROR_TXT_PATH, 'w') as file:
+                    file.write(str(self.focus_history[-1]))
+
                 # reset all variables for the next optimization round 
                 self.image_group_count_sum = 0
                 self.mean_count_per_image_group  = 0
                 self.single_img_mean_count = 0
 
+                QtCore.QCoreApplication.processEvents()
+
 if __name__ == "__main__":
-    app = BetatronApplication()
+    app = BetatronApplication([])
+    win = QtWidgets.QMainWindow()
+    sys.exit(app.exec_())
