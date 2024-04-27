@@ -6,6 +6,9 @@ import shutil
 import random
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import sys 
 
 """
 This is a simple optimization method which follows the increase
@@ -29,10 +32,8 @@ class ImageHandler(FileSystemEventHandler):
         if not event.is_directory:
             self.optimize_count_callback([event.src_path])
 
-class BetatronApplication():
-    def __init__(self, *args, **kwargs):
-        super(BetatronApplication, self).__init__(*args, **kwargs)
-
+class BetatronApplication:
+    def __init__(self):
         # ip, windows user and password of deformable mirror computer
         self.host = "192.168.200.3"
         self.user = "Utilisateur"
@@ -43,8 +44,11 @@ class BetatronApplication():
         self.mean_count_per_image_group  = 0
         self.norm_delta_count = 0
 
-        self.image_group = 2 # for how many images should the mean be taken for
-        self.image_group_images_processed = 0
+        # for how many images should the mean be taken for
+        self.image_group = 2 
+
+        # initialize optimization tracking variables
+        self.image_groups_processed = 0
         self.images_processed = 0
         self.image_group_count_sum = 0  
 
@@ -115,6 +119,7 @@ class BetatronApplication():
 
         mirror_files = [os.path.basename(MIRROR_TXT_PATH)]
 
+        # try to send the file via ftp connection
         try:
             local_files = os.listdir(mirror_files)
             for file_name in local_files:
@@ -129,7 +134,8 @@ class BetatronApplication():
 
                     os.remove(copy_path)
                     print(f"Uploaded: {file_name}")
-                    
+        
+        # log the error if there was one 
         except Exception as e:
             print(f"Error: {e}")
 
@@ -157,9 +163,7 @@ class BetatronApplication():
         
         # loop over every new image
         for image_path in new_images:
-            
-            relative_path = os.path.relpath(image_path, self.IMG_PATH)
-            
+                        
             # get the image's brightness using the dedicated function
             self.single_img_mean_count = self.calc_count_per_image(image_path)
             
@@ -179,10 +183,10 @@ class BetatronApplication():
                 self.count_history.append(self.mean_count_per_image_group)
 
                 # update count for 'image_group' processed 
-                self.image_group_images_processed += 1
+                self.image_groups_processed += 1
                 
                 # if we are in the first time where the algorithm needs to adjust the value
-                if self.image_group_images_processed == 1:
+                if self.image_groups_processed == 1:
                     print('-------------')       
                     print(f"initial focus: {values[0]}")
                     
@@ -204,31 +208,40 @@ class BetatronApplication():
                     print(f"first image, my initial direction is {self.direction}") 
 
                 # if we are in the second time where the algorithm needs to make an adjustment decision
-                elif self.image_group_images_processed == 2: 
+                elif self.image_groups_processed == 2: 
                     
                     # if the new brightness is larger than our previous record
                     if (self.count_history[-1] > self.record_count_history[-1]):
                         
-                        self.record_count_history.append(self.count_history[-1]) # this the new peak count
- 
-                        norm_delta_count = (self.count_history[-2] - self.record_count_history[-1])/(self.record_count_history[-1]) # recalculate norm_delta_count for new peak
-                        self.delta_count_history.append(norm_delta_count)   
+                        # this the new peak count
+                        self.record_count_history.append(self.count_history[-1]) 
 
-                        self.min_delta_count_history.append(self.delta_count_history[-1]) # the first run is our closest to the current peak
+                        # recalculate norm_delta_count for new peak
+                        norm_delta_count = (self.count_history[-2] - self.record_count_history[-1])/(self.record_count_history[-1]) 
+                        self.delta_count_history.append(norm_delta_count) # add to respective list
+
+                        # the first run is our closest to the current peak
+                        self.min_delta_count_history.append(self.delta_count_history[-1]) 
                         
-                        self.new_focus = self.new_focus + self.step_size * self.direction # continue in direction which led to count increase
+                        # continue in direction which led to count increase
+                        self.new_focus = self.new_focus + self.step_size * self.direction 
 
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
                         print("New count record")
 
-                    else: # if the new brightness is not larger, this wasn't the right direction
-                        norm_delta_count = (self.count_history[-1] - self.record_count_history[-1])/(self.record_count_history[-1]) # recalculate norm_delta_count for new peak
-                        self.delta_count_history.append(norm_delta_count)                           
-                        self.min_delta_count_history.append(self.delta_count_history[-1]) # this is the current closest to the peak count
+                    # if the new brightness is not larger, this wasn't the right direction
+                    else: 
+                        # recalculate norm_delta_count for new peak
+                        norm_delta_count = (self.count_history[-1] - self.record_count_history[-1])/(self.record_count_history[-1]) 
+                        self.delta_count_history.append(norm_delta_count) # add to respective list           
 
-                        self.new_focus = self.new_focus + self.step_size * self.direction * -1 # let's switch direction
+                        # this is the current closest to the peak count
+                        self.min_delta_count_history.append(self.delta_count_history[-1])
+
+                        
+                        self.new_focus = self.new_focus + self.step_size * self.direction * -1 
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
@@ -273,15 +286,13 @@ class BetatronApplication():
                         print("This is no good, switching direction")
                 
                 # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
-                self.upload_files_to_ftp() 
+                #self.upload_files_to_ftp() 
                       
                 # print the latest mean count (helps track system)
                 print(f"Mean count for last {self.image_group} images: {self.count_history[-1]}")
                 
                 # print the current focus which resulted in the brightness above
-                print("Current focus: {self.focus_history[-1]}")  
-                
-                # print(f"{relative_path}, {self.count_history[-1]}, current focus {self.focus_history[-1]}")  
+                print(f"Current focus: {self.focus_history[-1]}")  
                 print('-------------')
 
                 # reset all variables for the next optimization round 
@@ -289,5 +300,5 @@ class BetatronApplication():
                 self.mean_count_per_image_group  = 0
                 self.single_img_mean_count = 0
 
-# run the program
-BetatronApplication()
+if __name__ == "__main__":
+    app = BetatronApplication()
