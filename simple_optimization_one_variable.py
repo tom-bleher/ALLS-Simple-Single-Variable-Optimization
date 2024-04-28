@@ -136,7 +136,7 @@ class BetatronApplication(QtWidgets.QApplication):
                     print(f"Uploaded: {file_name}")
         
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error in FTP upload: {e}")
 
     # method to calculate count (by its brightness proxy)
     def calc_count_per_image(self, image_path):
@@ -204,7 +204,7 @@ class BetatronApplication(QtWidgets.QApplication):
                     # overwrite the txt file to the latest focus value
                     values[0] = self.focus_history[-1]
                     
-                    print(f"first image, my initial direction is {self.direction}") 
+                    print(f"First image, my initial direction is {self.direction}") 
 
                 # if we are in the second time where the algorithm needs to make an adjustment decision
                 elif self.image_groups_processed == 2: 
