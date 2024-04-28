@@ -117,7 +117,7 @@ class BetatronApplication(QtWidgets.QApplication):
 
     # method used to send the new values to the deformable mirror computer via FTP
     def upload_files_to_ftp(self):
-        base_directory = 'Server'
+
         mirror_files = [os.path.basename(MIRROR_TXT_PATH)]
 
         # try to send the file via ftp connection
