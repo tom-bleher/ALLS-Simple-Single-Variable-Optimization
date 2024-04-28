@@ -6,7 +6,6 @@ import shutil
 import random
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 from pyqtgraph.Qt import QtCore, QtWidgets
 import sys 
 
@@ -38,9 +37,9 @@ class BetatronApplication(QtWidgets.QApplication):
 
         # establish connection via ftp with dm computer for the first time progra is ran
         # ip, windows user and password of deformable mirror computer
-        self.ftp = FTP()
-        self.ftp.connect(host="192.168.200.3")
-        self.ftp.login(user="Utilisateur", passwd="alls")
+        #self.ftp = FTP()
+        #self.ftp.connect(host="192.168.200.3")
+        #self.ftp.login(user="Utilisateur", passwd="alls")
 
         # initialize optimization variables
         self.single_img_mean_count = 0
@@ -271,17 +270,6 @@ class BetatronApplication(QtWidgets.QApplication):
                         self.single_img_mean_count = 0
                         print("I'm close to the peak count, not changing focus")
 
-                    # we're closer than before to the record so continue in this direction
-                    elif self.delta_count_history and self.min_delta_count_history and (np.abs(self.delta_count_history[-1]) < np.abs(self.min_delta_count_history[-1])):
-                        # this is the new closest to the peak count
-                        self.min_delta_count_history.append(self.delta_count_history[-1])  
-                        self.new_focus = self.new_focus + self.step_size * self.direction
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        # update new focus
-                        self.focus_history.append(self.new_focus)  
-                        values[0] = self.focus_history[-1]
-                        print(f"Let's continue in this direction")
-
                     else:  # we're not closer than before, let's move to the other direction instead
                         self.new_focus = self.new_focus + self.step_size * self.direction * -1
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
@@ -293,7 +281,7 @@ class BetatronApplication(QtWidgets.QApplication):
                 # self.upload_files_to_ftp() 
                       
                 # print the latest mean count (helps track system)
-                print(f"Mean count for last {self.image_group} images: {self.count_history[-1]}")
+                print(f"Mean count for last {self.image_group} images: {self.count_history[-1]:.2f}")
                 
                 # print the current focus which resulted in the brightness above
                 print(f"Current focus: {self.focus_history[-1]}")  
