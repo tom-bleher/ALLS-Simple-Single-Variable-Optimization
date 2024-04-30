@@ -239,7 +239,7 @@ class BetatronApplication(QtWidgets.QApplication):
                         self.min_delta_count_history.append(self.delta_count_history[-1])
 
                         # switch direction
-                        self.new_focus = self.new_focus + self.step_size * self.direction * -1 
+                        self.new_focus = self.initial_focus + self.step_size * self.direction * -1 
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
@@ -275,7 +275,7 @@ class BetatronApplication(QtWidgets.QApplication):
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
-                        print("This is no good, switching direction")
+                        print("This is no good, going the other direction instead")
                 
                 # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
                 # self.upload_files_to_ftp() 
@@ -284,7 +284,7 @@ class BetatronApplication(QtWidgets.QApplication):
                 print(f"Mean count for last {self.image_group} images: {self.count_history[-1]:.2f}")
                 
                 # print the current focus which resulted in the brightness above
-                print(f"Current focus: {self.focus_history[-1]}")  
+                print(f"{image_path}, Current focus: {self.focus_history[-1]}")  
                 print('-------------')
 
                 # write new value to txt file
