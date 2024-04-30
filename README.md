@@ -97,125 +97,150 @@ After processing of the data through the algorithm, we send a command text file 
 The image processing algorithm optimizes the X-ray flux by following the direction of count increase by adjusting the focus of the deformable mirror.
 
 ```python
-    # main optimization block consisting of logical statmants which follow the increase direction
-    def optimize_count(self, new_images):
-        self.new_image_tracker()
-        new_images = [image_path for image_path in new_images if os.path.exists(image_path)]
-        new_images.sort(key=os.path.getctime)
-        # loop over every new image
-        for image_path in new_images:
-            # get the image's brightness using the dedicated function
-            self.single_img_mean_count = self.calc_count_per_image(image_path)
-            # sum the brightness for the specified number of images for which the mean will be taken
-            self.image_group_count_sum += self.single_img_mean_count
-            # keep track of the times the program ran (number of images we processed)
-            self.images_processed += 1
-            # conditional to check if the desired numbers of images to mean was processed
-            if self.images_processed % self.image_group == 0:
-                # take the mean count for the number of images set
-                self.mean_count_per_image_group = np.mean(self.single_img_mean_count)
-                # append to count_history list to keep track of count through the optimization process
-                self.count_history.append(self.mean_count_per_image_group)
-                # update count for 'image_group' processed
-                self.image_groups_processed += 1
-                # if we are in the first time where the algorithm needs to adjust the value
-                if self.image_groups_processed == 1:
-                    print('-------------')      
-                    print(f"initial focus: {values[0]}")
-                    # add initial focus to list (even though we already got the count for it)
-                    self.focus_history.append(self.initial_focus)  
-                    # our first run is our first count peak
-                    self.record_count_history.append(self.count_history[-1])
-                    # try random direction
-                    self.new_focus = self.initial_focus + self.step_size * self.direction  
-                    # update new focus
-                    self.focus_history.append(self.new_focus)
-                    # overwrite the txt file to the latest focus value
-                    values[0] = self.focus_history[-1]
-                    print(f"first image, my initial direction is {self.direction}")
-                # if we are in the second time where the algorithm needs to make an adjustment decision
-                elif self.image_groups_processed == 2:
-                    # if the new brightness is larger than our previous record
-                    if (self.count_history[-1] > self.record_count_history[-1]):
-                        # this the new peak count
-self.record_count_history.append(self.count_history[-1])
-                        # recalculate delta_count for new peak
-                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
-                        self.delta_count_history.append(delta_count) # add to respective list
-                        # the first run is our closest to the current peak
-                    self.min_delta_count_history.append(self.delta_count_history[-1])
-                        # continue in direction which led to count increase
-                        self.new_focus = self.new_focus + self.step_size * self.direction
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        self.focus_history.append(self.new_focus)
-                        values[0] = self.focus_history[-1]
-                        print("New count record")
-                    # if the new brightness is not larger, this wasn't the right direction
-                    else:
-                        # recalculate delta_count for new peak
-                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
-                        self.delta_count_history.append(delta_count) # add to respective list          
-                        # this is the current closest to the peak count
-self.min_delta_count_history.append(self.delta_count_history[-1])
-                        # switch direction
-                        self.new_focus = self.new_focus + self.step_size * self.direction * -1
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        self.focus_history.append(self.new_focus)
-                        values[0] = self.focus_history[-1]
-                        print("This is no good, switching direction")
-                # on the third occurrence and forward we have enough data to start optimization
-                else:
-                    # compare to record count
-                    delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
-                    self.delta_count_history.append(delta_count)
-                    # if latest count is larger than the previous record
-                    if self.count_history[-1] > self.record_count_history[-1]:
-                        # this is the new current peak count
-self.record_count_history.append(self.count_history[-1])
-                        # continue in this direction
-                        self.new_focus = self.new_focus + self.step_size * self.direction
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        self.focus_history.append(self.new_focus)
-                        values[0] = self.focus_history[-1]
-                        print("New count record")
-                    # we're close enough to the optimized value, stop adjusting focus value
-                    elif np.abs((self.count_history[-1] - self.count_history[-2])) <= self.count_change_tolerance:
-                        self.image_group_count_sum = 0
-                        self.mean_count_per_image_group  = 0
-                        self.single_img_mean_count = 0
-                        print("I'm close to the peak count, not changing focus")
-                    # we're closer than before to the record so continue in this direction
-                    elif self.delta_count_history and self.min_delta_count_history and (np.abs(self.delta_count_history[-1]) < np.abs(self.min_delta_count_history[-1])):
-                        # this is the new closest to the peak count
-self.min_delta_count_history.append(self.delta_count_history[-1])  
-                        self.new_focus = self.new_focus + self.step_size * self.direction
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        # update new focus
-                        self.focus_history.append(self.new_focus)  
-                        values[0] = self.focus_history[-1]
-                        print(f"Let's continue in this direction")
-                    else:  # we're not closer than before, let's move to the other direction instead
-                        self.new_focus = self.new_focus + self.step_size * self.direction * -1
-                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
-                        self.focus_history.append(self.new_focus)
-                        values[0] = self.focus_history[-1]
+    # main optimization block consisting of logical statmants which follow the increase direction
+    def optimize_count(self, new_images):
 
-                        print("This is no good, switching direction")
-                # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
-                self.upload_files_to_ftp()
-                # print the latest mean count (helps track system)
-                print(f"Mean count for last {self.image_group} images: {self.count_history[-1]}")
-                # print the current focus which resulted in the brightness above
-                print(f"Current focus: {self.focus_history[-1]}")  
-                print('-------------')
-                
-                # write new value to txt file
-                with open(MIRROR_TXT_PATH, 'w') as file:
-                    file.write(str(self.focus_history[-1]))
-                # reset all variables for the next optimization round
-                self.image_group_count_sum = 0
-                self.mean_count_per_image_group  = 0
-                self.single_img_mean_count = 0
+        self.new_image_tracker() 
+        new_images = [image_path for image_path in new_images if os.path.exists(image_path)]
+        new_images.sort(key=os.path.getctime)
+        
+        # loop over every new image
+        for image_path in new_images:
+                        
+            # get the image's brightness using the dedicated function
+            self.single_img_mean_count = self.calc_count_per_image(image_path)
+            
+            # sum the brightness for the specified number of images for which the mean will be taken
+            self.image_group_count_sum += self.single_img_mean_count
+            
+            # keep track of the times the program ran (number of images we processed)
+            self.images_processed += 1
+            
+            # conditional to check if the desired numbers of images to mean was processed
+            if self.images_processed % self.image_group == 0:
+                
+                # take the mean count for the number of images set
+                self.mean_count_per_image_group = np.mean(self.single_img_mean_count)
+                
+                # append to count_history list to keep track of count through the optimization process
+                self.count_history.append(self.mean_count_per_image_group)
 
-                QtCore.QCoreApplication.processEvents()
+                # update count for 'image_group' processed 
+                self.image_groups_processed += 1
+                
+                # if we are in the first time where the algorithm needs to adjust the value
+                if self.image_groups_processed == 1:
+                    print('-------------')       
+                    print(f"initial focus: {values[0]}")
+                    
+                    # add initial focus to list (even though we already got the count for it)
+                    self.focus_history.append(self.initial_focus)  
+                    
+                    # our first run is our first count peak
+                    self.record_count_history.append(self.count_history[-1])
+                    
+                    # try random direction
+                    self.new_focus = self.initial_focus + self.step_size * self.direction  
+                    
+                    # update new focus
+                    self.focus_history.append(self.new_focus)
+                    
+                    # overwrite the txt file to the latest focus value
+                    values[0] = self.focus_history[-1]
+                    
+                    print(f"First image, my initial direction is {self.direction}") 
+
+                # if we are in the second time where the algorithm needs to make an adjustment decision
+                elif self.image_groups_processed == 2: 
+                    
+                    # if the new brightness is larger than our previous record
+                    if (self.count_history[-1] > self.record_count_history[-1]):
+                        
+                        # this the new peak count
+                        self.record_count_history.append(self.count_history[-1]) 
+
+                        # recalculate delta_count for new peak
+                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                        self.delta_count_history.append(delta_count) # add to respective list
+
+                        # the first run is our closest to the current peak
+                        self.min_delta_count_history.append(self.delta_count_history[-1]) 
+                        
+                        # continue in direction which led to count increase
+                        self.new_focus = self.new_focus + self.step_size * self.direction 
+
+                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
+                        self.focus_history.append(self.new_focus)
+                        values[0] = self.focus_history[-1]
+                        print("New count record")
+
+                    # if the new brightness is not larger, this wasn't the right direction
+                    else: 
+                        # recalculate delta_count for new peak
+                        delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                        self.delta_count_history.append(delta_count) # add to respective list           
+
+                        # this is the current closest to the peak count
+                        self.min_delta_count_history.append(self.delta_count_history[-1])
+
+                        # switch direction
+                        self.direction = self.direction*-1 # set new direction for later 
+                        self.new_focus = self.initial_focus + self.step_size * self.direction
+                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
+                        self.focus_history.append(self.new_focus)
+                        values[0] = self.focus_history[-1]
+                        print("This is no good, switching direction")
+
+                # on the third occurrence and forward we have enough data to start optimization
+                else: 
+                    # compare to record count
+                    delta_count = np.abs((self.count_history[-1] - self.count_history[-2]))
+                    self.delta_count_history.append(delta_count)
+                    
+                    # if latest count is larger than the previous record
+                    if self.count_history[-1] > self.record_count_history[-1]:
+                        # this is the new current peak count
+                        self.record_count_history.append(self.count_history[-1]) 
+                        
+                        # continue in this direction
+                        self.new_focus = self.new_focus + self.step_size * self.direction
+                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
+                        self.focus_history.append(self.new_focus)
+                        values[0] = self.focus_history[-1]
+                        print("New count record")
+                    
+                    # we're close enough to the optimized value, stop adjusting focus value
+                    elif np.abs((self.count_history[-1] - self.count_history[-2])) <= self.count_change_tolerance:
+                        self.image_group_count_sum = 0
+                        self.mean_count_per_image_group  = 0
+                        self.single_img_mean_count = 0
+                        print("I'm close to the peak count, not changing focus")
+
+                    else:  # we're not closer than before, let's move to the other direction instead
+                        self.new_focus = self.new_focus + self.step_size * self.direction * -1
+                        self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
+                        self.focus_history.append(self.new_focus)
+                        values[0] = self.focus_history[-1]
+                        print("This is no good, going the other direction instead")
+                
+                # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
+                # self.upload_files_to_ftp() 
+                      
+                # print the latest mean count (helps track system)
+                print(f"Mean count for last {self.image_group} images: {self.count_history[-1]:.2f}")
+                
+                # print the current focus which resulted in the brightness above
+                print(f"{image_path}, Current focus: {self.focus_history[-1]}")  
+                print('-------------')
+
+                # write new value to txt file
+                with open(MIRROR_TXT_PATH, 'w') as file:
+                    file.write(str(self.focus_history[-1]))
+
+                # reset all variables for the next optimization round 
+                self.image_group_count_sum = 0
+                self.mean_count_per_image_group  = 0
+                self.single_img_mean_count = 0
+
+                QtCore.QCoreApplication.processEvents()
 ```
