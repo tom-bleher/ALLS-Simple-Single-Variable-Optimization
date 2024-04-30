@@ -239,7 +239,8 @@ class BetatronApplication(QtWidgets.QApplication):
                         self.min_delta_count_history.append(self.delta_count_history[-1])
 
                         # switch direction
-                        self.new_focus = self.initial_focus + self.step_size * self.direction * -1 
+                        self.direction = self.direction*-1 # set new direction for later 
+                        self.new_focus = self.initial_focus + self.step_size * self.direction
                         self.new_focus = int(np.round(np.clip(self.new_focus, self.lower_bound, self.upper_bound)))
                         self.focus_history.append(self.new_focus)
                         values[0] = self.focus_history[-1]
