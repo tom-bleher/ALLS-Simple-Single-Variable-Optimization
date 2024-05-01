@@ -7,6 +7,7 @@ import random
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from pyqtgraph.Qt import QtCore, QtWidgets
+import pyqtgraph as pg
 import sys 
 
 """
@@ -92,6 +93,35 @@ class BetatronApplication(QtWidgets.QApplication):
         self.file_observer = Observer()
         self.file_observer.schedule(self.image_handler, path=self.IMG_PATH, recursive=False)
         self.file_observer.start()
+
+    # ------------ Plotting ------------ #
+
+        # initialize lists to keep track of optimization process
+        self.iteration_data = []
+        
+        self.count_plot_widget = pg.PlotWidget()
+        self.count_plot_widget.setWindowTitle('count optimization')
+        self.count_plot_widget.setLabel('left', 'Count')
+        self.count_plot_widget.setLabel('bottom', 'Image group iteration')
+        self.count_plot_widget.show()
+
+        self.main_plot_window = pg.GraphicsLayoutWidget()
+        self.main_plot_window.show()
+
+        layout = self.main_plot_window.addLayout(row=0, col=0)
+
+        self.count_plot_widget = layout.addPlot(title='Count vs image group iteration')
+
+        self.plot_curve = self.count_plot_widget.plot(pen='r')
+
+        # y labels of plots
+        self.count_plot_widget.setLabel('left', 'Image Group Iteration')
+
+        # x label of both plots
+        self.count_plot_widget.setLabel('bottom', 'Image Group Iteration')
+
+        self.plot_curve.setData(self.iteration_data, self.count_history)
+
     
     # method to track new incoming images in directory
     def new_image_tracker(self):
@@ -173,7 +203,7 @@ class BetatronApplication(QtWidgets.QApplication):
             
             # conditional to check if the desired numbers of images to mean was processed
             if self.images_processed % self.image_group == 0:
-                
+                                
                 # take the mean count for the number of images set
                 self.mean_count_per_image_group = np.mean(self.single_img_mean_count)
                 
@@ -183,6 +213,8 @@ class BetatronApplication(QtWidgets.QApplication):
                 # update count for 'image_group' processed 
                 self.image_groups_processed += 1
                 
+                self.iteration_data.append(self.image_groups_processed)
+
                 # if we are in the first time where the algorithm needs to adjust the value
                 if self.image_groups_processed == 1:
                     print('-------------')       
@@ -291,7 +323,10 @@ class BetatronApplication(QtWidgets.QApplication):
                 # write new value to txt file
                 with open(MIRROR_TXT_PATH, 'w') as file:
                     file.write(str(self.focus_history[-1]))
-
+                
+                # plot to help track the system
+                self.plot_curve.setData(self.iteration_data, self.count_history)
+                
                 # reset all variables for the next optimization round 
                 self.image_group_count_sum = 0
                 self.mean_count_per_image_group  = 0
