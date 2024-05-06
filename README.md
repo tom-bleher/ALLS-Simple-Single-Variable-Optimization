@@ -226,7 +226,7 @@ def optimize_count(self, new_images):
                     print("This is no good, going the other direction instead")
             
             # after the algorithm adjusted the value and wrote it to the txt, send new txt to deformable mirror computer
-            # self.upload_files_to_ftp() 
+            self.upload_files_to_ftp() 
                   
             # print the latest mean count (helps track system)
             print(f"Mean count for last {self.image_group} images: {self.count_history[-1]:.2f}")
